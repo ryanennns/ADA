@@ -9,19 +9,29 @@ import requests
 from vosk import Model, KaldiRecognizer
 from silero_vad import load_silero_vad
 from kokoro import KPipeline
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+ollama_model = os.getenv("OLLAMA_MODEL")
+vosk_model = os.getenv("VOSK_MODEL")
+kokoro_voice = os.getenv("KOKORO_VOICE")
+
+print("[System] Ollama model: " + ollama_model)
+print("[System] Vosk model: " + vosk_model)
+print("[System] Kokoro voice: " + kokoro_voice)
 
 # === Settings ===
 device = 'pulse'
 samplerate = 16000
 blocksize = 512
 silence_timeout = 1.0
-model_path = "vosk-model-en-us-0.22"
-ollama_model = "gemma3:4b"
+ollama_model = ollama_model
 
 # === Initialize speech components ===
 q = queue.Queue()
-model = Model(model_path)
-rec = KaldiRecognizer(model, samplerate)
+loaded_vosk_model = Model(vosk_model)
+rec = KaldiRecognizer(loaded_vosk_model, samplerate)
 vad = load_silero_vad()
 recording = False
 buffer = []
@@ -33,7 +43,7 @@ pipeline = KPipeline(lang_code='a')  # American English voice set
 def speak_kokoro(text):
     generator = pipeline(
         text,
-        voice='af_heart',
+        voice=kokoro_voice,
         speed=1.0,
         split_pattern=None
     )

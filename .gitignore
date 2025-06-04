@@ -2,3 +2,4 @@
 vosk-*
 .venv
 .idea
+.env
