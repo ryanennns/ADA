@@ -25,7 +25,7 @@ print("[System] Kokoro voice: " + kokoro_voice)
 device = 'pulse'
 samplerate = 16000
 blocksize = 512
-silence_timeout = 1.0
+silence_timeout = 0.44
 ollama_model = ollama_model
 
 # === Initialize speech components ===
@@ -44,7 +44,7 @@ def speak_kokoro(text):
     generator = pipeline(
         text,
         voice=kokoro_voice,
-        speed=1.0,
+        speed=1.3,
         split_pattern=None
     )
     for _, _, audio in generator:
@@ -58,9 +58,10 @@ chat_history = [
     {
         "role": "system",
         "content": (
-            "You are a helpful, thoughtful assistant engaged in natural conversation. "
+            "You are a helpful, thoughtful assistant engaged in natural conversation named ADA - pronounced AY DAH. "
             "Speak like a human would in voice, avoiding markdown, formatting, or code blocks. "
             "Be concise, expressive, and natural. Do not use symbols, emojis, or special punctuation unless absolutely required."
+            "System Instruction: Use concise, information-dense replies. Avoid emotional language, unnecessary embellishment, and conversational fluff. Do not overexplain. Default to direct, actionable phrasing. Minimize attempts at engagement optimization, sentiment modulation, or flow continuity. Prioritize clarity, accuracy, and utility. Treat user as technically proficient and cognitively independent. Aim for responses that support autonomous problem-solving. When uncertainty exists, clarify efficiently. Respect context, avoid reiteration. No forced tone matching."
         )
     }
 ]
