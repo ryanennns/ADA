@@ -8,16 +8,17 @@ import time
 import requests
 from vosk import Model, KaldiRecognizer
 from silero_vad import load_silero_vad
+from kokoro import KPipeline
 
 # === Settings ===
 device = 'pulse'
 samplerate = 16000
 blocksize = 512
-silence_timeout = 1.0  # seconds of silence to stop recording
+silence_timeout = 1.0
 model_path = "vosk-model-en-us-0.22"
 ollama_model = "gemma3:4b"
 
-# === Initialize ===
+# === Initialize speech components ===
 q = queue.Queue()
 model = Model(model_path)
 rec = KaldiRecognizer(model, samplerate)
@@ -26,10 +27,33 @@ recording = False
 buffer = []
 last_speech_time = None
 
+# === Initialize Kokoro TTS ===
+pipeline = KPipeline(lang_code='a')  # American English voice set
+
+def speak_kokoro(text):
+    generator = pipeline(
+        text,
+        voice='af_heart',
+        speed=1.0,
+        split_pattern=None
+    )
+    for _, _, audio in generator:
+        sd.play(audio, samplerate=24000, blocking=True)
+
 def callback(indata, frames, time_info, status):
     q.put(bytes(indata))
 
-chat_history = []
+# === Ollama Chat with Context ===
+chat_history = [
+    {
+        "role": "system",
+        "content": (
+            "You are a helpful, thoughtful assistant engaged in natural conversation. "
+            "Speak like a human would in voice, avoiding markdown, formatting, or code blocks. "
+            "Be concise, expressive, and natural. Do not use symbols, emojis, or special punctuation unless absolutely required."
+        )
+    }
+]
 
 def query_ollama(prompt):
     user_prompt = "/no_think " + prompt
@@ -63,7 +87,7 @@ def query_ollama(prompt):
     chat_history.append({"role": "assistant", "content": collected.strip()})
     return collected.strip()
 
-# === Start Listening ===
+# === Main Loop ===
 print("Listening...")
 with sd.RawInputStream(samplerate=samplerate, blocksize=blocksize,
                        device=device, dtype='int16', channels=1,
@@ -82,20 +106,21 @@ with sd.RawInputStream(samplerate=samplerate, blocksize=blocksize,
                 rec.Reset()
             last_speech_time = time.time()
             buffer.append(data)
-        elif recording:
-            if time.time() - last_speech_time > silence_timeout:
-                print("[Silero VAD] Speech ended")
-                print("[Vosk] Transcribing...")
+        elif recording and (time.time() - last_speech_time > silence_timeout):
+            print("[Silero VAD] Speech ended")
+            print("[Vosk] Transcribing...")
 
-                full_audio = b''.join(buffer)
-                rec.AcceptWaveform(full_audio)
-                result = json.loads(rec.FinalResult())
-                transcript = result.get("text", "")
-                print("[Vosk] Transcript:", transcript)
+            full_audio = b''.join(buffer)
+            rec.AcceptWaveform(full_audio)
+            result = json.loads(rec.FinalResult())
+            transcript = result.get("text", "")
+            print("[Vosk] Transcript:", transcript)
 
-                if transcript:
-                    print("[Ollama] Sending prompt...")
-                    query_ollama(transcript)
+            if transcript:
+                print("[Ollama] Sending prompt...")
+                response = query_ollama(transcript)
+                print("[Kokoro] Speaking...")
+                speak_kokoro(response)
 
-                print("[Vosk] Ready.")
-                recording = False
+            print("[Vosk] Ready.")
+            recording = False
