@@ -1,6 +1,7 @@
+import re
+
 import sounddevice as sd
 import queue
-import sys
 import json
 import numpy as np
 import torch
@@ -12,23 +13,25 @@ from kokoro import KPipeline
 from dotenv import load_dotenv
 import os
 
+from tool_definitions import get_current_time
+from tool_schema import tool_get_current_time, tool_toggle_lights
+
 load_dotenv()
 ollama_model = os.getenv("OLLAMA_MODEL")
 vosk_model = os.getenv("VOSK_MODEL")
 kokoro_voice = os.getenv("KOKORO_VOICE")
+ollama_temperature = float(os.getenv("OLLAMA_TEMPERATURE")) or 0.5
+silence_timeout = float(os.getenv("SILENCE_TIMEOUT")) or 0.5
 
 print("[System] Ollama model: " + ollama_model)
 print("[System] Vosk model: " + vosk_model)
 print("[System] Kokoro voice: " + kokoro_voice)
+print("[System] Ollama temperature: " + str(ollama_temperature))
 
-# === Settings ===
 device = 'pulse'
 samplerate = 16000
 blocksize = 512
-silence_timeout = 0.44
-ollama_model = ollama_model
 
-# === Initialize speech components ===
 q = queue.Queue()
 loaded_vosk_model = Model(vosk_model)
 rec = KaldiRecognizer(loaded_vosk_model, samplerate)
@@ -37,10 +40,11 @@ recording = False
 buffer = []
 last_speech_time = None
 
-# === Initialize Kokoro TTS ===
-pipeline = KPipeline(lang_code='a')  # American English voice set
+pipeline = KPipeline(lang_code='a')
+
 
 def speak_kokoro(text):
+    sd.stop()
     generator = pipeline(
         text,
         voice=kokoro_voice,
@@ -50,21 +54,20 @@ def speak_kokoro(text):
     for _, _, audio in generator:
         sd.play(audio, samplerate=24000, blocking=True)
 
+
 def callback(indata, frames, time_info, status):
     q.put(bytes(indata))
 
-# === Ollama Chat with Context ===
+
 chat_history = [
     {
         "role": "system",
         "content": (
-            "You are a helpful, thoughtful assistant engaged in natural conversation named ADA - pronounced AY DAH. "
-            "Speak like a human would in voice, avoiding markdown, formatting, or code blocks. "
-            "Be concise, expressive, and natural. Do not use symbols, emojis, or special punctuation unless absolutely required."
-            "System Instruction: Use concise, information-dense replies. Avoid emotional language, unnecessary embellishment, and conversational fluff. Do not overexplain. Default to direct, actionable phrasing. Minimize attempts at engagement optimization, sentiment modulation, or flow continuity. Prioritize clarity, accuracy, and utility. Treat user as technically proficient and cognitively independent. Aim for responses that support autonomous problem-solving. When uncertainty exists, clarify efficiently. Respect context, avoid reiteration. No forced tone matching."
+            "You are ADA — pronounced AY DAH — a helpful AI assistant. Speak like a human."
         )
     }
 ]
+
 
 def query_ollama(prompt):
     user_prompt = "/no_think " + prompt
@@ -74,31 +77,38 @@ def query_ollama(prompt):
         json={
             "model": ollama_model,
             "messages": chat_history,
-            "stream": True
-        },
-        stream=True
+            "stream": False,
+            "options": {
+                "temperature": ollama_temperature
+            },
+            "tools": [
+                tool_get_current_time,
+                tool_toggle_lights
+            ]
+        }
     )
-
     if not response.ok:
         return f"[Ollama Error] {response.status_code}: {response.text}"
+    response_json = response.json()
+    content = response_json.get("message", {}).get("content", "")
+    tool_calls = response_json.get("message", {}).get("tool_calls", [])
+    print(tool_calls)
 
-    collected = ""
-    for line in response.iter_lines(decode_unicode=True):
-        if not line.strip():
-            continue
-        try:
-            data = json.loads(line)
-            content = data.get("message", {}).get("content", "")
-            print(content, end="", flush=True)
-            collected += content
-        except json.JSONDecodeError:
-            continue
+    for tool_call in tool_calls:
+        if tool_call["function"]["name"] == "get_current_time":
+            timezone = tool_call["function"]["arguments"].get("timezone", "UTC")
+            current_time = get_current_time(timezone)
+            content += f"\nThe current time in {timezone} is {current_time}"
+        elif tool_call["function"]["name"] == "toggle_lights":
+            state = tool_call["function"]["arguments"].get("state", "off")
+            content += f"\nLights turned {state}."
 
-    print()  # final newline after stream
-    chat_history.append({"role": "assistant", "content": collected.strip()})
-    return collected.strip()
+    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+    print(content)
+    chat_history.append({"role": "assistant", "content": content})
+    return content
 
-# === Main Loop ===
+
 print("Listening...")
 with sd.RawInputStream(samplerate=samplerate, blocksize=blocksize,
                        device=device, dtype='int16', channels=1,
