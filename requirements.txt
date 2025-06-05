@@ -1,8 +1,11 @@
 vosk==0.3.45
 torch>=2.0.0
-numpy
-requests
-sounddevice
+numpy~=2.2.6
+requests~=2.32.3
+sounddevice~=0.5.2
 silero-vad==5.1.2
 kokoro>=0.9.4
 python-dotenv>=1.0.0
+
+opencv-python~=4.11.0.86
+pytz~=2025.2

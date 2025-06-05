@@ -1,20 +1,21 @@
-import re
-
-import sounddevice as sd
-import queue
+import base64
 import json
-import numpy as np
-import torch
-import time
-import requests
-from vosk import Model, KaldiRecognizer
-from silero_vad import load_silero_vad
-from kokoro import KPipeline
-from dotenv import load_dotenv
 import os
+import queue
+import re
+import time
+
+import cv2
+import numpy as np
+import requests
+import sounddevice as sd
+import torch
+from dotenv import load_dotenv
+from kokoro import KPipeline
+from silero_vad import load_silero_vad
+from vosk import Model, KaldiRecognizer
 
 from tool_definitions import get_current_time
-from tool_schema import tool_get_current_time, tool_toggle_lights
 
 load_dotenv()
 ollama_model = os.getenv("OLLAMA_MODEL")
@@ -42,6 +43,19 @@ last_speech_time = None
 
 pipeline = KPipeline(lang_code='a')
 
+latest_frame = None
+
+def capture_snapshot(filename="snapshot.jpg"):
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        return None
+    ret, frame = cap.read()
+    cap.release()
+    if ret:
+        cv2.imwrite(filename, frame)
+        return filename
+    return None
+
 
 def speak_kokoro(text):
     sd.stop()
@@ -54,10 +68,8 @@ def speak_kokoro(text):
     for _, _, audio in generator:
         sd.play(audio, samplerate=24000, blocking=True)
 
-
 def callback(indata, frames, time_info, status):
     q.put(bytes(indata))
-
 
 chat_history = [
     {
@@ -68,23 +80,36 @@ chat_history = [
     }
 ]
 
-
 def query_ollama(prompt):
     user_prompt = "/no_think " + prompt
     chat_history.append({"role": "user", "content": user_prompt})
+
+    image_path = capture_snapshot()
+    if not image_path:
+        return "[Vision] No webcam frame available."
+
+    with open(image_path, "rb") as f:
+        encoded_image = base64.b64encode(f.read()).decode("utf-8")
+
     response = requests.post(
         "http://localhost:11434/api/chat",
         json={
             "model": ollama_model,
-            "messages": chat_history,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                    "images": [encoded_image]
+                }
+            ],
             "stream": False,
             "options": {
                 "temperature": ollama_temperature
             },
-            "tools": [
-                tool_get_current_time,
-                tool_toggle_lights
-            ]
+            # "tools": [
+            #     tool_get_current_time,
+            #     tool_toggle_lights
+            # ]
         }
     )
     if not response.ok:
@@ -107,7 +132,6 @@ def query_ollama(prompt):
     print(content)
     chat_history.append({"role": "assistant", "content": content})
     return content
-
 
 print("Listening...")
 with sd.RawInputStream(samplerate=samplerate, blocksize=blocksize,
