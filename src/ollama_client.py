@@ -1,18 +1,10 @@
 import os
 
+from src.__llm_interface__ import LlmInterface
 
-class OllamaClient:
-    base_url: str
-    model: str
+
+class OllamaClient(LlmInterface):
     temperature: float
-    messages: list = [
-        {
-            "role": "system",
-            "content": (
-                "You are ADA — pronounced AY DAH — a helpful AI assistant. Speak like a human."
-            )
-        }
-    ]
 
     def __init__(self):
         self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/api")
