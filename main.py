@@ -15,6 +15,7 @@ from kokoro import KPipeline
 from silero_vad import load_silero_vad
 from vosk import Model, KaldiRecognizer
 
+from src.ollama_client import OllamaClient
 from tool_definitions import get_current_time
 
 load_dotenv()
@@ -71,18 +72,8 @@ def speak_kokoro(text):
 def callback(indata, frames, time_info, status):
     q.put(bytes(indata))
 
-chat_history = [
-    {
-        "role": "system",
-        "content": (
-            "You are ADA — pronounced AY DAH — a helpful AI assistant. Speak like a human."
-        )
-    }
-]
-
 def query_ollama(prompt):
     user_prompt = "/no_think " + prompt
-    chat_history.append({"role": "user", "content": user_prompt})
 
     image_path = capture_snapshot()
     if not image_path:
@@ -91,33 +82,10 @@ def query_ollama(prompt):
     with open(image_path, "rb") as f:
         encoded_image = base64.b64encode(f.read()).decode("utf-8")
 
-    response = requests.post(
-        "http://localhost:11434/api/chat",
-        json={
-            "model": ollama_model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": user_prompt,
-                    "images": [encoded_image]
-                }
-            ],
-            "stream": False,
-            "options": {
-                "temperature": ollama_temperature
-            },
-            # "tools": [
-            #     tool_get_current_time,
-            #     tool_toggle_lights
-            # ]
-        }
+    content, tool_calls = (OllamaClient()).chat_completion(
+        user_prompt,
+        images=[encoded_image]
     )
-    if not response.ok:
-        return f"[Ollama Error] {response.status_code}: {response.text}"
-    response_json = response.json()
-    content = response_json.get("message", {}).get("content", "")
-    tool_calls = response_json.get("message", {}).get("tool_calls", [])
-    print(tool_calls)
 
     for tool_call in tool_calls:
         if tool_call["function"]["name"] == "get_current_time":
@@ -130,7 +98,6 @@ def query_ollama(prompt):
 
     content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
     print(content)
-    chat_history.append({"role": "assistant", "content": content})
     return content
 
 print("Listening...")
