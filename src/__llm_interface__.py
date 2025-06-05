@@ -8,6 +8,7 @@ class LlmInterface(ABC):
             "role": "system",
             "content": (
                 "You are ADA — pronounced AY DAH — a helpful AI assistant. Speak like a human."
+                "Keep responses concise and brief, no more than 3 sentences."
             )
         }
     ]

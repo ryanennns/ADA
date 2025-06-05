@@ -46,6 +46,8 @@ pipeline = KPipeline(lang_code='a')
 
 latest_frame = None
 
+ollama_client = OllamaClient()
+
 def capture_snapshot(filename="snapshot.jpg"):
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
@@ -82,7 +84,7 @@ def query_ollama(prompt):
     with open(image_path, "rb") as f:
         encoded_image = base64.b64encode(f.read()).decode("utf-8")
 
-    content, tool_calls = (OllamaClient()).chat_completion(
+    content, tool_calls = ollama_client.chat_completion(
         user_prompt,
         images=[encoded_image]
     )
