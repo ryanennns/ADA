@@ -7,7 +7,6 @@ import time
 
 import cv2
 import numpy as np
-import requests
 import sounddevice as sd
 import torch
 from dotenv import load_dotenv
@@ -15,12 +14,12 @@ from kokoro import KPipeline
 from silero_vad import load_silero_vad
 from vosk import Model, KaldiRecognizer
 
-from src.ollama_client import OllamaClient
+from src.deepseek_client import DeepseekClient
 from tool_definitions import get_current_time
 
 load_dotenv()
 ollama_model = os.getenv("OLLAMA_MODEL")
-vosk_model = os.getenv("VOSK_MODEL")
+vosk_model = 'vosk_models/' +  os.getenv("VOSK_MODEL")
 kokoro_voice = os.getenv("KOKORO_VOICE")
 ollama_temperature = float(os.getenv("OLLAMA_TEMPERATURE")) or 0.5
 silence_timeout = float(os.getenv("SILENCE_TIMEOUT")) or 0.5
@@ -46,7 +45,7 @@ pipeline = KPipeline(lang_code='a')
 
 latest_frame = None
 
-ollama_client = OllamaClient()
+client = DeepseekClient()
 
 def capture_snapshot(filename="snapshot.jpg"):
     cap = cv2.VideoCapture(0)
@@ -84,7 +83,7 @@ def query_ollama(prompt):
     with open(image_path, "rb") as f:
         encoded_image = base64.b64encode(f.read()).decode("utf-8")
 
-    content, tool_calls = ollama_client.chat_completion(
+    content, tool_calls = client.chat_completion(
         user_prompt,
         images=[encoded_image]
     )
