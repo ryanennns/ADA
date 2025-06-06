@@ -1,6 +1,10 @@
 import os
 
+from dotenv import load_dotenv
+
 from src.__llm_interface__ import LlmInterface
+
+load_dotenv()
 
 
 class OllamaClient(LlmInterface):
@@ -19,7 +23,7 @@ class OllamaClient(LlmInterface):
             "http://localhost:11434/api/chat",
             json={
                 "model": self.model,
-                "messages": self.messages,
+                "messages": self.messages if self.provide_history else [{"role": "user", "content": prompt, "images": images}],
                 "stream": False,
                 "options": {
                     "temperature": self.temperature

@@ -1,14 +1,16 @@
-from abc import abstractmethod, ABC
+import os
+system_prompt = os.getenv("SYSTEM_PROMPT", "")
 
-class LlmInterface(ABC):
+class LlmInterface:
+    provide_history: bool = True
     base_url: str
     model: str
     messages: list = [
         {
             "role": "system",
             "content": (
-                "You are ADA — pronounced AY DAH — a helpful AI assistant. Speak like a human."
-                "Keep responses concise and brief, no more than 3 sentences."
+                "You are ADA — pronounced AY DAH — a helpful AI assistant."
+                "" + system_prompt
             )
         }
     ]
